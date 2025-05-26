@@ -1,34 +1,29 @@
 const express = require('express');
-const router = express.Router();
-const passport = require('passport');
+const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const User = require('../models/User');
+const { User } = require('../models');
+const router = express.Router();
 
 router.post('/register', async (req, res) => {
-    const { username, password } = req.body;
     try {
-        const existingUser = await User.findOne({ where: { username } });
-        if (existingUser) return res.status(400).json({ message: 'Utilisateur existe déjà' });
-        await User.create({ username, password });
-        res.status(201).json({ message: 'Inscription réussie' });
+        const user = await User.create(req.body);
+        res.json({ message: 'Inscription réussie' });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(400).json({ error: 'Erreur d’inscription' });
     }
 });
 
-router.post('/login', passport.authenticate('local'), (req, res) => {
-    res.json({ message: 'Connecté', user: req.user });
-});
+router.post('/login', async (req, res) => {
+    const user = await User.findOne({ where: { email: req.body.email } });
+    if (!user || !(await bcrypt.compare(req.body.password, user.password))) {
+        return res.status(401).json({ error: 'Identifiants invalides' });
+    }
 
-router.get('/logout', (req, res) => {
-    req.logout(() => {
-        res.json({ message: 'Déconnecté' });
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+        expiresIn: '1h',
     });
-});
 
-router.get('/me', (req, res) => {
-    if (req.isAuthenticated()) return res.json(req.user);
-    res.status(401).json({ message: 'Non authentifié' });
+    res.json({ token });
 });
 
 module.exports = router;
